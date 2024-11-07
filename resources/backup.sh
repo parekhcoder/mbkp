@@ -10,7 +10,7 @@ function SetS3Profiles()
         return 1
     fi
 
-    AddLog "Got Vaults" "D"
+    echo "Got Vaults"
 
     # Extract Vault UUID
     local vaultUUID=$(jq -r '.[] | select(.name=="'$OPWD_VAULT'") | .id' <<< "$vaults")
@@ -30,7 +30,7 @@ function SetS3Profiles()
         return 1
     fi
 
-    AddLog "Got Vault Items" "D"
+    echo "Got Vault Items"
 
     # Extract UUIDs for items
     local cloudS3UUID=$(jq -r '.[] | select(.title=="'$OPWD_CLOUD_KEY'") | .id' <<< "$vaultItems")
