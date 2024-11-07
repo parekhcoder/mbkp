@@ -2,6 +2,7 @@
 FROM ubuntu:22.04
 
 RUN apt-get update \
+    apt-get install wget \
     wget https://downloads.mongodb.com/compass/mongodb-mongosh_2.3.3_amd64.deb && \
     apt install ./mongodb-mongosh_2.3.3_amd64.deb && \
     rm -f mongodb-mongosh_2.3.3_amd64.deb
