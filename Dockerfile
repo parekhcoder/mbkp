@@ -1,13 +1,9 @@
 # Set the base image
 FROM ubuntu:22.04
 
-RUN apt-get update \
-    apt-get install wget \
-    wget https://downloads.mongodb.com/compass/mongodb-mongosh_2.3.3_amd64.deb && \
-    apt install ./mongodb-mongosh_2.3.3_amd64.deb && \
-    rm -f mongodb-mongosh_2.3.3_amd64.deb
-
-RUN apt-get install -y curl jq \    
+RUN apt-get update \    
+    apt-get install -y curl jq \    
+    wget \
     python3 \
     python3-pip \
     groff \
@@ -24,6 +20,10 @@ RUN apt-get install -y curl jq \
     git && \
     pip3 install --upgrade awscli s3cmd python-magic && \
     export PATH="/usr/lib/go/bin:$PATH"
+
+RUN wget https://downloads.mongodb.com/compass/mongodb-mongosh_2.3.3_amd64.deb \
+    apt install ./mongodb-mongosh_2.3.3_amd64.deb && \
+    rm -f mongodb-mongosh_2.3.3_amd64.deb
 
     # Set Default Environment Variables
 ENV BACKUP_CREATE_DATABASE_STATEMENT=false
