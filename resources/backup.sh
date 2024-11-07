@@ -1,3 +1,4 @@
+# !/bin/bash
 function SetS3Profiles()
 {
     # Fetch vaults
@@ -35,7 +36,8 @@ function SetS3Profiles()
     # Extract UUIDs for items
     local cloudS3UUID=$(jq -r '.[] | select(.title=="'$OPWD_CLOUD_KEY'") | .id' <<< "$vaultItems")
     local localS3UUID=$(jq -r '.[] | select(.title=="'$OPWD_LOCAL_KEY'") | .id' <<< "$vaultItems")
-    local agePublicKeyUUID=$(jq -r '.[] | select(.title=="'$AGE_PUBLIC_KEY'") | .id' <<< "$vaultItems")
+    local agePublicKeyUUID=$(jq -r '.[] | select(.title=="'$OPWD_AGE_KEY'") | .id' <<< "$vaultItems")
+    local mongoUUID=$(jq -r '.[] | select(.title=="'$OPWD_MONGO_KEY'") | .id' <<< "$vaultItems")
 
     # Fetch cloud S3 item if CLOUD_UPLOAD is enabled
     if [ "$CLOUD_UPLOAD" = "true" ]; then
@@ -108,6 +110,24 @@ function SetS3Profiles()
 
     agePublicKey=$(jq -r '.fields[] | select(.id=="credential") | .value' <<< "$agePublicKeyItem")
     echo "Age public key successfully retrieved."
+
+    if [ -z "$mongoUUID" ]; then
+            echo "Error: Mongo key '$OPWD_MONGO_KEY' not found in vault items."
+            return 1
+        fi
+
+        local mongoItem=$(curl -s -w "\n%{response_code}\n" $OPWD_URL/v1/vaults/$vaultUUID/items/$mongoUUID -H "Accept: application/json"  -H "Authorization: Bearer $OPWD_TOKEN")
+        local httpCode=$(tail -n1 <<< "$mongoItem")
+        mongoItem=$(sed '$ d' <<< "$mongoItem")
+
+        if [ "$httpCode" != "200" ]; then
+            echo "Error: Failed to retrieve mongo item. HTTP code: $httpCode, Response: $mongoItem"
+            return 1
+        fi
+
+        mongoUser=$(jq -r '.fields[] | select(.label=="user") | .value' <<< "$mongoItem")
+        mongoPwd=$(jq -r '.fields[] | select(.label=="pass") | .value' <<< "$mongoItem")
+	mongoHost=$(jq -r '.fields[] | select(.label=="host") | .value' <<< "$mongoItem")
 }
 
 function Backup()
@@ -126,7 +146,7 @@ function Backup()
 		local cmonth=$(date --date="$timestamp" +%m)
 
     # Construct the mongodump command with conditional database and collection
-    local dumpCMD="mongodump --gzip"
+    local dumpCMD="mongodump --gzip --uri $mongoHost --username $mongoUser --password $mongoPwd"
     local dbName="all"
     local colName="all"
 
