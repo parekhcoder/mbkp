@@ -2,8 +2,7 @@
 FROM ubuntu:22.04
 
 RUN apt-get update \    
-    apt-get install -y curl jq \    
-    wget \
+    apt-get install -y curl jq \       
     python3 \
     python3-pip \
     groff \
@@ -21,7 +20,7 @@ RUN apt-get update \
     pip3 install --upgrade awscli s3cmd python-magic && \
     export PATH="/usr/lib/go/bin:$PATH"
 
-RUN wget https://downloads.mongodb.com/compass/mongodb-mongosh_2.3.3_amd64.deb \
+RUN curl -O https://downloads.mongodb.com/compass/mongodb-mongosh_2.3.3_amd64.deb \
     apt install ./mongodb-mongosh_2.3.3_amd64.deb && \
     rm -f mongodb-mongosh_2.3.3_amd64.deb
 
