@@ -1,9 +1,12 @@
 # Set the base image
 FROM ubuntu:22.04
 
-RUN wget https://downloads.mongodb.com/compass/mongodb-mongosh_2.3.3_amd64.deb && \
-    apt-get update \
-    && apt-get install -y curl jq \    
+RUN apt-get update \
+    wget https://downloads.mongodb.com/compass/mongodb-mongosh_2.3.3_amd64.deb && \
+    apt install ./mongodb-mongosh_2.3.3_amd64.deb && \
+    rm -f mongodb-mongosh_2.3.3_amd64.deb
+
+RUN apt-get install -y curl jq \    
     python3 \
     python3-pip \
     groff \
@@ -16,8 +19,7 @@ RUN wget https://downloads.mongodb.com/compass/mongodb-mongosh_2.3.3_amd64.deb &
     coreutils \
     gzip \      
     gcc make \
-    golang \
-    ./mongodb-mongosh_2.3.3_amd64.deb \
+    golang \    
     git && \
     pip3 install --upgrade awscli s3cmd python-magic && \
     export PATH="/usr/lib/go/bin:$PATH"
