@@ -126,8 +126,10 @@ function SetS3Profiles()
         fi
 
         mongoUser=$(jq -r '.fields[] | select(.label=="user") | .value' <<< "$mongoItem")
-        mongoPwd=$(jq -r '.fields[] | select(.label=="pass") | .value' <<< "$mongoItem")
-	mongoHost=$(jq -r '.fields[] | select(.label=="host") | .value' <<< "$mongoItem")
+       # mongoPwd=$(jq -r '.fields[] | select(.label=="pass") | .value' <<< "$mongoItem")
+       # mongoHost=$(jq -r '.fields[] | select(.label=="host") | .value' <<< "$mongoItem")
+       mongoConfig=$(jq -r '.fields[] | select(.label=="config") | .value' <<< "$mongoItem")
+       echo "$mongoConfig" > mongoConfig.conf
 }
 
 function Backup()
@@ -148,18 +150,23 @@ function Backup()
     
 
     # Construct the mongodump command with conditional database and collection
-    local dumpCMD="mongodump --gzip --uri $mongoHost --username $mongoUser --password $mongoPwd"
+    local dumpCMD="mongodump --gzip --config $mongoConfig"
     local dbName="all"
     local colName="all"
 
-    if [ -n "$database" ]; then
+    if [ -n "$DATABASE" ]; then
         dump_cmd+=" --db $database"
         $dbName=$database
     fi
 
-    if [ -n "$collection" ]; then
+    if [ -n "$COLLECTION" ]; then
         dump_cmd+=" --collection $collection"
         $colName=$collection
+    fi
+
+    
+    if [ -n "$BACKUP_ADDITIONAL_PARAMS" ]; then
+        dump_cmd+=" $BACKUP_ADDITIONAL_PARAMS"        
     fi
 
     # Output file for the backup
