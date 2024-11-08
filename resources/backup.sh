@@ -150,7 +150,7 @@ function Backup()
     
 
     # Construct the mongodump command with conditional database and collection
-    local dumpCMD="mongodump --gzip --config mongoConfig.conf --authenticationDatabase --username $mongoUser"
+    local dumpCMD="mongodump --gzip --config mongoConfig.conf --authenticationDatabase admin --username $mongoUser"
     local dbName="all"
     local colName="all"
 
