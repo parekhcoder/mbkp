@@ -140,7 +140,7 @@ function Backup()
     fi
 
     # Create output directory if it doesn't exist
-    mkdir -p "$outputDir"
+    mkdir -p "$OUTPUTDIR"
 
     # Get current timestamp for the filename    
     local cdate=$(date -u)
@@ -150,7 +150,7 @@ function Backup()
     
 
     # Construct the mongodump command with conditional database and collection
-    local dumpCMD="mongodump --gzip --config $mongoConfig"
+    local dumpCMD="mongodump --gzip --config mongoConfig.conf"
     local dbName="all"
     local colName="all"
 
@@ -171,7 +171,7 @@ function Backup()
 
     # Output file for the backup
     local fileName="mongodb_backup_${dbName}_${colName}_${timestamp}.gz"
-    local outputFile="$outputDir/$fileName"
+    local outputFile="$OUTPUTDIR/$fileName"
 
     # Run the mongodump command and save output
     $dumpCMD --archive="$outputFile"
