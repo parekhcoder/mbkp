@@ -21,9 +21,9 @@ RUN apt-get update \
     export PATH="/usr/lib/go/bin:$PATH"
 
     RUN  apt install wget \
-      &&  wget https://downloads.mongodb.com/compass/mongodb-mongosh_2.3.3_amd64.deb \
-    && apt install ./mongodb-mongosh_2.3.3_amd64.deb && \
-    rm -f mongodb-mongosh_2.3.3_amd64.deb
+      &&  wget https://fastdl.mongodb.org/tools/db/mongodb-database-tools-debian12-x86_64-100.10.0.deb \
+    && apt install ./mongodb-database-tools-debian12-x86_64-100.10.0.deb && \
+    rm -f mongodb-database-tools-debian12-x86_64-100.10.0.deb
 
 
 
