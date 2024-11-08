@@ -140,10 +140,12 @@ function Backup()
     # Create output directory if it doesn't exist
     mkdir -p "$outputDir"
 
-    # Get current timestamp for the filename
-    local timestamp=$(date +$BACKUP_TIMESTAMP)
-    local cyear=$(date --date="$timestamp" +%Y)
-		local cmonth=$(date --date="$timestamp" +%m)
+    # Get current timestamp for the filename    
+    local cdate=$(date -u)
+    local cyear=$(date --date="$cdate" +%Y)
+    local cmonth=$(date --date="$cdate" +%m)
+    local timestamp=$(date --date="$cdate" +$BACKUP_TIMESTAMP)
+    
 
     # Construct the mongodump command with conditional database and collection
     local dumpCMD="mongodump --gzip --uri $mongoHost --username $mongoUser --password $mongoPwd"
