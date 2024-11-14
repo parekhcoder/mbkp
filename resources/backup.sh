@@ -140,7 +140,7 @@ function Backup()
     fi
 
     # Create output directory if it doesn't exist
-    mkdir -p "$OUTPUTDIR"
+    mkdir -p "$OUTPUT_DIR"
 
     # Get current timestamp for the filename    
     local cdate=$(date -u)
@@ -150,7 +150,7 @@ function Backup()
     
 
     # Construct the mongodump command with conditional database and collection
-    local dumpCMD="mongodump --gzip --config mongoConfig.conf --authenticationDatabase admin --username $mongoUser"
+    local dumpCMD="mongodump --config mongoConfig.conf --authenticationDatabase admin --username $mongoUser"
     local dbName="all"
     local colName="all"
 
@@ -170,30 +170,39 @@ function Backup()
     fi
 
     # Output file for the backup
-    local fileName="mongodb_backup_${dbName}_${colName}_${timestamp}.gz"
-    local outputFile="$OUTPUTDIR/$fileName"
-
+    local dumpDir="$OUTPUT_DIR/mongodb_backup_${dbName}_${colName}_${timestamp}"    
+    dump_cmd+=" --out $dumpDir"
     # Run the mongodump command and save output
-    $dumpCMD --archive="$outputFile"
+    $dumpCMD 
     if [ $? -ne 0 ]; then
         echo "Error: mongodump failed."
         exit 1
     fi
 
-    echo "Backup created: $outputFile"
+     echo "Backup created in directory: $dumpDir"
+
+      # Compress the backup directory using tar
+    local tarFile="$dumpDir.tar.gz"
+    tar -czf "$tarFile" -C "$OUTPUT_DIR" "$(basename "$dumpDir")"
+    if [ $? -ne 0 ]; then
+        echo "Error: Tar compression failed."
+        exit 1
+    fi
+
+    echo "Backup compressed into: $tarFile"
 
     # Encrypt the backup file using Age
-    local encryptedFile="${outputFile}.age"
-    age -r "$agePublicKey" -o "$encryptedFile" "$outputFile"
+    local encryptedFile="${tarFile}.age"
+    age -r "$agePublicKey" -o "$encryptedFile" "$tarFile"
     if [ $? -ne 0 ]; then
         echo "Error: Encryption failed."
         exit 1
     fi
 
-    # Remove the original unencrypted file
-    rm "$outputFile"
+    # Remove the original unencrypted tar file
+    rm "$tarFile"
 
-    echo "Encrypted backup created: $encrypted_file"
+    echo "Encrypted backup created: $encryptedFile"
 
     if [ "$CLOUD_UPLOAD" = "true" ]; 
 			then
@@ -219,7 +228,7 @@ function Backup()
     
     echo "Backup process completed successfully."
 
-    rm "$outputFile".age
+    rm "$tarFile".age
 
 }
 
