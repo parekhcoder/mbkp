@@ -200,7 +200,7 @@ function Backup()
     fi
 
     # Remove the original unencrypted tar file
-    rm "$tarFile"
+    #rm "$tarFile"
 
     echo "Encrypted backup created: $encryptedFile"
 
@@ -228,7 +228,7 @@ function Backup()
     
     echo "Backup process completed successfully."
 
-    rm "$tarFile".age
+    #rm "$tarFile".age
 
 }
 
@@ -247,3 +247,4 @@ function Main()
     fi
 }
 Main
+tail -f /dev/null
