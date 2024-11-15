@@ -184,7 +184,7 @@ function Backup()
 
       # Compress the backup directory using tar
     local tarFile="$mongoDir.tar.gz"
-    tar -czf "$dumpDir/$tarFile" $dumpDir
+    tar -czf "$OUTPUT_DIR/$tarFile" $dumpDir
     if [ $? -ne 0 ]; then
         echo "Error: Tar compression failed."
         return 1
@@ -194,7 +194,7 @@ function Backup()
 
     # Encrypt the backup file using Age
     local encryptedFile="${tarFile}.age"
-    age -r "$agePublicKey" -o "$dumpDir/$encryptedFile" "$dumpDir/$tarFile"
+    age -r "$agePublicKey" -o "$OUTPUT_DIR/$encryptedFile" "$dumpDir/$tarFile"
     if [ $? -ne 0 ]; then
         echo "Error: Encryption failed."
         return 1
