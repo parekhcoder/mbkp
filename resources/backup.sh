@@ -184,7 +184,7 @@ function Backup()
 
       # Compress the backup directory using tar
     local tarFile="$mongoDir.tar.gz"
-    tar -czf "$tarFile" $dumpDir
+    tar -czf "$dumpDir/$tarFile" $dumpDir
     if [ $? -ne 0 ]; then
         echo "Error: Tar compression failed."
         return 1
@@ -194,7 +194,7 @@ function Backup()
 
     # Encrypt the backup file using Age
     local encryptedFile="${tarFile}.age"
-    age -r "$agePublicKey" -o "$encryptedFile" "$tarFile"
+    age -r "$agePublicKey" -o "$dumpDir/$encryptedFile" "$dumpDir/$tarFile"
     if [ $? -ne 0 ]; then
         echo "Error: Encryption failed."
         return 1
@@ -212,7 +212,7 @@ function Backup()
 			  			echo "Success: Cloud Upload at $cloudS3Bucket$cloudS3BucketPath/$cyear/$cmonth/$fileName.age"
 		                      else
 		                        	isSuccess=false
-						echo "Error: s3upload msg: $awsOutput"
+						echo "Error: Cloud Upload msg: $awsOutput"
 		                fi
 		fi
     
@@ -229,7 +229,7 @@ function Backup()
     
     echo "Backup process completed successfully."
 
-    #rm "$tarFile".age
+    #rm "$encryptedFile".age
 
 }
 
@@ -243,7 +243,7 @@ function Main()
 	
 	Backup
 	 if [ $? -ne 0 ]; then
-        echo "Error: Failed to set S3 profiles."
+        echo "Error: Backup failed."
         return 1
     fi
 }
