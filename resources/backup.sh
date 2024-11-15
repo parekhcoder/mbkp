@@ -194,7 +194,7 @@ function Backup()
 
     # Encrypt the backup file using Age
     local encryptedFile="${tarFile}.age"
-    age -r "$agePublicKey" -o "$OUTPUT_DIR/$encryptedFile" "$dumpDir/$tarFile"
+    age -r "$agePublicKey" -o "$OUTPUT_DIR/$encryptedFile" "$OUTPUT_DIR/$tarFile"
     if [ $? -ne 0 ]; then
         echo "Error: Encryption failed."
         return 1
