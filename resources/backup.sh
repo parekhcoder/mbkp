@@ -155,23 +155,24 @@ function Backup()
     local colName="all"
 
     if [ -n "$DATABASE" ]; then
-        dump_cmd+=" --db $database"
+        dumpCMD+=" --db $database"
         $dbName=$database
     fi
 
     if [ -n "$COLLECTION" ]; then
-        dump_cmd+=" --collection $collection"
+        dumpCMD+=" --collection $collection"
         $colName=$collection
     fi
 
     
     if [ -n "$BACKUP_ADDITIONAL_PARAMS" ]; then
-        dump_cmd+=" $BACKUP_ADDITIONAL_PARAMS"        
+        dumpCMD+=" $BACKUP_ADDITIONAL_PARAMS"        
     fi
-
-    # Output file for the backup
-    local dumpDir="$OUTPUT_DIR/mongodb_backup_${dbName}_${colName}_${timestamp}"    
-    dump_cmd+=" --out $dumpDir"
+    set -x
+    # Output file for the backup    
+    local mongoDir="mongodb_backup_${dbName}_${colName}_${timestamp}"
+    local dumpDir="$OUTPUT_DIR/$mongoDir"    
+    dumpCMD+=" --out $dumpDir"
     # Run the mongodump command and save output
     $dumpCMD 
     if [ $? -ne 0 ]; then
@@ -182,8 +183,8 @@ function Backup()
      echo "Backup created in directory: $dumpDir"
 
       # Compress the backup directory using tar
-    local tarFile="$dumpDir.tar.gz"
-    tar -czf "$tarFile" "$dumpDir"
+    local tarFile="$mongoDir.tar.gz"
+    tar -czf "$tarFile" $dumpDir
     if [ $? -ne 0 ]; then
         echo "Error: Tar compression failed."
         return 1
