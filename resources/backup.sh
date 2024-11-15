@@ -207,9 +207,9 @@ function Backup()
 
     if [ "$CLOUD_UPLOAD" = "true" ]; 
 			then
-				if awsOutput=$(aws --no-verify-ssl  --only-show-errors --endpoint-url=$cloudS3URL s3 cp $encryptedFile s3://$cloudS3Bucket$cloudS3BucketPath/$cyear/$cmonth/$fileName.age --profile cloud 2>&1); 
+				if awsOutput=$(aws --no-verify-ssl  --only-show-errors --endpoint-url=$cloudS3URL s3 cp $OUTPUT_DIR/$encryptedFile s3://$cloudS3Bucket$cloudS3BucketPath/$cyear/$cmonth/$encryptedFile --profile cloud 2>&1); 
 		  		      then
-			  			echo "Success: Cloud Upload at $cloudS3Bucket$cloudS3BucketPath/$cyear/$cmonth/$fileName.age"
+			  			echo "Success: Cloud Upload at $cloudS3Bucket$cloudS3BucketPath/$cyear/$cmonth/$encryptedFile"
 		                      else
 		                        	isSuccess=false
 						echo "Error: Cloud Upload msg: $awsOutput"
@@ -218,9 +218,9 @@ function Backup()
     
 	      if [ "$LOCAL_UPLOAD" = "true" ]; 
 		then
-		      if awsOutput=$(aws --no-verify-ssl --only-show-errors --endpoint-url=$localS3URL s3 cp $encryptedFile s3://$localS3Bucket$localS3BucketPath/$cyear/$cmonth/$fileName.age --profile local 2>&1); 
+		      if awsOutput=$(aws --no-verify-ssl --only-show-errors --endpoint-url=$localS3URL s3 cp $OUTPUT_DIR/$encryptedFile s3://$localS3Bucket$localS3BucketPath/$cyear/$cmonth/$encryptedFile --profile local 2>&1); 
 			then
-			 	  echo "Success: Local Upload at $localS3Bucket$localS3BucketPath/$cyear/$cmonth/$fileName.age"
+			 	  echo "Success: Local Upload at $localS3Bucket$localS3BucketPath/$cyear/$cmonth/$encryptedFile"
 			else
 			  	isSuccess=false
       				echo "Error: Local Upload msg: $awsOutput"
