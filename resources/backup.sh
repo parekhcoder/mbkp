@@ -183,7 +183,7 @@ function Backup()
 
       # Compress the backup directory using tar
     local tarFile="$dumpDir.tar.gz"
-    tar -czf "$tarFile" -C "$OUTPUT_DIR" "$(basename "$dumpDir")"
+    tar -czf "$tarFile" "$dumpDir"
     if [ $? -ne 0 ]; then
         echo "Error: Tar compression failed."
         return 1
