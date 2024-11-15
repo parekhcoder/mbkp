@@ -184,7 +184,7 @@ function Backup()
 
       # Compress the backup directory using tar
     local tarFile="$mongoDir.tar.gz"
-    tar -czf "$OUTPUT_DIR/$tarFile" $dumpDir
+    tar -czf "$OUTPUT_DIR/$tarFile" -C $OUTPUT_DIR $mongoDir
     if [ $? -ne 0 ]; then
         echo "Error: Tar compression failed."
         return 1
