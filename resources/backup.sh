@@ -136,7 +136,7 @@ function Backup()
 {    # Check if Age recipient is provided
     if [ -z "$agePublicKey" ]; then
         echo "Error: Age recipient key is required for encryption."
-        exit 1
+        return 1
     fi
 
     # Create output directory if it doesn't exist
@@ -176,7 +176,7 @@ function Backup()
     $dumpCMD 
     if [ $? -ne 0 ]; then
         echo "Error: mongodump failed."
-        exit 1
+        return 1
     fi
 
      echo "Backup created in directory: $dumpDir"
@@ -186,7 +186,7 @@ function Backup()
     tar -czf "$tarFile" -C "$OUTPUT_DIR" "$(basename "$dumpDir")"
     if [ $? -ne 0 ]; then
         echo "Error: Tar compression failed."
-        exit 1
+        return 1
     fi
 
     echo "Backup compressed into: $tarFile"
@@ -196,7 +196,7 @@ function Backup()
     age -r "$agePublicKey" -o "$encryptedFile" "$tarFile"
     if [ $? -ne 0 ]; then
         echo "Error: Encryption failed."
-        exit 1
+        return 1
     fi
 
     # Remove the original unencrypted tar file
