@@ -248,4 +248,4 @@ function Main()
     fi
 }
 Main
-tail -f /dev/null
+#tail -f /dev/null
