@@ -26,6 +26,7 @@ RUN apt-get update \
     golang \
     cron \    
     git \    
+    wget \
     libc6 && \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add - && \
@@ -40,8 +41,7 @@ RUN apt-get update \
     rm -rf /var/lib/apt/lists/* && \
     pip3 install --break-system-packages --no-cache-dir --upgrade awscli s3cmd python-magic 
 
-    RUN  apt install wget \
-      &&  wget https://fastdl.mongodb.org/tools/db/mongodb-database-tools-debian12-x86_64-100.10.0.deb \
+    RUN  wget https://fastdl.mongodb.org/tools/db/mongodb-database-tools-debian12-x86_64-100.10.0.deb \
     && apt install ./mongodb-database-tools-debian12-x86_64-100.10.0.deb && \
     rm -f mongodb-database-tools-debian12-x86_64-100.10.0.deb
 
