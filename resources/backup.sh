@@ -114,7 +114,7 @@ configure_s3_profile() {
     secret_key=$(jq -r '.fields[] | select(.label=="secretkey") | .value' <<< "$item")
     url=$(jq -r '.urls[0].href' <<< "$item")
     bucket=$(jq -r '.fields[] | select(.label=="bucket") | .value' <<< "$item")
-    bucket_path=$(jq -r '.fields[] | select(.label=="bucketpath") | .value' <<< "$item")
+    bucket_path=$(jq -r '.fields[] | select(.label=="mongodbbucketpath") | .value' <<< "$item")
 
     if [[ -z "$access_key" || -z "$secret_key" || -z "$url" || -z "$bucket" || -z "$bucket_path" ]]; then
         log_msg "ERROR" "Missing fields in $profile S3 item."
