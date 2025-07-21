@@ -45,8 +45,7 @@ RUN apt-get update \
     && apt install ./mongodb-database-tools-debian12-x86_64-100.10.0.deb && \
     rm -f mongodb-database-tools-debian12-x86_64-100.10.0.deb
 
-
-
+RUN python3 -m site --user-base
   
 ENV CLOUD_SDK_VERSION=367.0.0
 # Release commit for https://github.com/FiloSottile/age/tree/v1.0.0
