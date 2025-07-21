@@ -9,7 +9,7 @@ for tool in jq aws mongodump gzip age curl sleep tee sync; do
         echo "ERROR: $tool is not installed." >&2
         exit 1
     fi
-done
+fi
 
 # Define default log directory early
 LOG_DIR_PATH="${LOG_DIR:-/app/log}"
@@ -33,16 +33,14 @@ log_msg() {
         --arg T "$tenant" \
         '{"timestamp": $t, "appname": $a, "level": $l, "message": $m, "nodename": $n, "podname": $p, "tenant": $T}'
     ); then
-        
+        # Fallback if jq fails
         echo "ERROR: Failed to generate JSON log. Level: \"$level\", Message: \"$message\"" >&2        
     fi
     
     if [[ -z "${log_file:-}" || ! -w "$LOG_DIR_PATH" ]]; then        
         echo "$json_log"
     else
-        
         echo "$json_log" | tee -a "$log_file"
-        
         sync "$log_file" 2>/dev/null || echo "WARN: Failed to sync log file: $log_file" >&2
     fi    
 }
@@ -254,15 +252,14 @@ get_vault_items_n_set_s3_profiles() {
         return 1
     fi
     
+    mongo_uri=$(jq -r '.urls[0].href' <<< "$mongo_item") 
     mongo_user=$(jq -r '.fields[] | select(.label=="user") | .value' <<< "$mongo_item")
     mongo_password=$(jq -r '.fields[] | select(.label=="pass") | .value' <<< "$mongo_item")
-    mongo_host=$(jq -r '.fields[] | select(.label=="host") | .value' <<< "$mongo_item")
-    mongo_port=$(jq -r '.fields[] | select(.label=="port") | .value' <<< "$mongo_item")
     mongo_auth_db=$(jq -r '.fields[] | select(.label=="authenticationDatabase") | .value' <<< "$mongo_item")
-    mongo_config=$(jq -r '.fields[] | select(.label=="config") | .value' <<< "$mongo_item") # This will store the content of the config file
+    mongo_config_extra=$(jq -r '.fields[] | select(.label=="config") | .value' <<< "$mongo_item")
 
-    if [[ -z "$mongo_user" || -z "$mongo_password" || -z "$mongo_host" || -z "$mongo_port" || -z "$mongo_auth_db" ]]; then
-        log_msg "ERROR" "Missing fields in Mongo item (user, password, host, port, or authenticationDatabase)."
+    if [[ -z "$mongo_uri" || -z "$mongo_user" || -z "$mongo_password" || -z "$mongo_auth_db" ]]; then
+        log_msg "ERROR" "Missing fields in Mongo item (URI, user, password, or authenticationDatabase)."
         return 1
     fi
     log_msg "DEBUG" "Mongo details retrieved."
@@ -270,65 +267,46 @@ get_vault_items_n_set_s3_profiles() {
     # Create mongodump config file for secure credentials
     mongo_cnf="$tmp_dir/mongo.cnf"
     cat > "$mongo_cnf" << EOF
+uri=$mongo_uri
 username=$mongo_user
 password=$mongo_password
-host=$mongo_host
-port=$mongo_port
 authenticationDatabase=$mongo_auth_db
 EOF
-    # If a config field is provided, append its content to the mongo.cnf file
-    if [[ -n "$mongo_config" ]]; then
-        echo "$mongo_config" >> "$mongo_cnf"
+    if [[ -n "$mongo_config_extra" ]]; then
+        echo "$mongo_config_extra" >> "$mongo_cnf"
     fi
     chmod 600 "$mongo_cnf" || {
         log_msg "ERROR" "Failed to set permissions on Mongo config file."
         return 1
     }
 
-    # Verify Mongo connectivity (using mongosh or mongo client if available, else relying on mongodump itself)
-    # For a simple connectivity check without `mongo` shell, we can try a basic `mongodump` dry run or `mongo` if installed.
-    # Given the original script uses `mysql -e "SELECT 1"`, for MongoDB, a similar simple command with `mongosh` or `mongo` would be ideal.
-    # However, if only `mongodump` is guaranteed, we'll rely on it failing later for connectivity issues.
-    # A robust check would be:
-    # if ! mongosh "mongodb://$mongo_user:$mongo_password@$mongo_host:$mongo_port/$mongo_auth_db" --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
-    #   log_msg "ERROR" "Failed to connect to MongoDB server."
-    #   return 1
-    # fi
     log_msg "DEBUG" "Vault items retrieved and S3 profiles configured."
     return 0
 }
 
+# Function to get a list of all databases from MongoDB (excluding or including system dbs)
 list_all_dbs_mongo() {
     log_msg "DEBUG" "Starting list_all_dbs_mongo function."
-    local db_list
-    if [[ "${TARGET_ALL_DATABASES:-false}" == "true" ]]; then
-        if [[ -n "${TARGET_DATABASE_NAMES:-}" ]]; then
-            log_msg "INFO" "TARGET_ALL_DATABASES is true; ignoring TARGET_DATABASE_NAMES for MongoDB."
-            TARGET_DATABASE_NAMES=""
-        fi
-        
-        # Use mongosh or mongo client to list databases.
-        # This requires `mongosh` or `mongo` to be installed and accessible.
-        # Ensure that mongo client is able to connect with the provided credentials.
-        # Example using mongosh for listing databases (requires mongosh v1.0+):
-        if ! command -v mongosh &>/dev/null; then
-            log_msg "ERROR" "mongosh is not installed. Cannot list all databases dynamically."
-            log_msg "ERROR" "Please set TARGET_DATABASE_NAMES explicitly or install mongosh."
-            return 1
-        fi
+    local db_list_raw db_list_filtered=()
+    
+    if ! command -v mongosh &>/dev/null; then
+        log_msg "ERROR" "mongosh is not installed. Cannot list all databases dynamically."
+        log_msg "ERROR" "Please set TARGET_DATABASE_NAMES or TARGET_DB_COLLECTION_PAIRS explicitly or install mongosh."
+        return 1
+    fi
 
-        local mongosh_cmd="mongosh \"mongodb://$mongo_user:$mongo_password@$mongo_host:$mongo_port/$mongo_auth_db\" --quiet --eval 'db.adminCommand({ listDatabases: 1, nameOnly: true }).databases.forEach(function(d){print(d.name)})'"
-        log_msg "DEBUG" "Executing mongosh to list databases: $mongosh_cmd"
+    local mongosh_cmd="mongosh \"$mongo_uri\" --username \"$mongo_user\" --password \"$mongo_password\" --authenticationDatabase \"$mongo_auth_db\" --quiet --eval 'db.adminCommand({ listDatabases: 1, nameOnly: true }).databases.forEach(function(d){print(d.name)})'"
+    log_msg "DEBUG" "Executing mongosh to list databases."
 
-        if ! mapfile -t db_list < <(eval "$mongosh_cmd" 2>&1); then
-            log_msg "ERROR" "Failed to list MongoDB databases."
-            return 1
-        fi
+    if ! mapfile -t db_list_raw < <(eval "$mongosh_cmd" 2>&1); then
+        log_msg "ERROR" "Failed to list MongoDB databases. Ensure mongosh can connect using the provided URI and credentials."
+        return 1
+    fi
 
-        # Exclude system databases like 'admin', 'config', 'local'
+    # Filter out system databases unless INCLUDE_SYSTEM_DATABASES is true
+    if [[ "${INCLUDE_SYSTEM_DATABASES:-false}" != "true" ]]; then
         local excluded_dbs=("admin" "config" "local")
-        local filtered_db_list=()
-        for db in "${db_list[@]}"; do
+        for db in "${db_list_raw[@]}"; do
             local exclude=0
             for excluded_db in "${excluded_dbs[@]}"; do
                 if [[ "$db" == "$excluded_db" ]]; then
@@ -337,182 +315,290 @@ list_all_dbs_mongo() {
                 fi
             done
             if [[ "$exclude" -eq 0 ]]; then
-                filtered_db_list+=("$db")
+                db_list_filtered+=("$db")
             fi
         done
-        TARGET_DATABASE_NAMES=("${filtered_db_list[@]}")
-
-        if [[ "${#TARGET_DATABASE_NAMES[@]}" -eq 0 ]]; then
-            log_msg "WARN" "No user databases found to backup after exclusions."
-        fi
-        log_msg "DEBUG" "Built list of MongoDB databases: ${TARGET_DATABASE_NAMES[*]}"
+        TARGET_DATABASE_NAMES=("${db_list_filtered[@]}")
+        log_msg "DEBUG" "Filtered MongoDB databases (excluding system): ${TARGET_DATABASE_NAMES[*]}"
     else
-        if [[ -z "${TARGET_DATABASE_NAMES:-}" ]]; then
-            log_msg "ERROR" "TARGET_DATABASE_NAMES is not set and TARGET_ALL_DATABASES is not true for MongoDB."
-            return 1
-        fi
-        IFS=',' read -ra TARGET_DATABASE_NAMES <<< "${TARGET_DATABASE_NAMES}"
-        if [[ "${#TARGET_DATABASE_NAMES[@]}" -eq 0 ]]; then
-            log_msg "ERROR" "TARGET_DATABASE_NAMES is empty or contains only delimiters for MongoDB."
-            return 1
-        fi
-        log_msg "DEBUG" "Target MongoDB databases specified: ${TARGET_DATABASE_NAMES[*]}"
+        TARGET_DATABASE_NAMES=("${db_list_raw[@]}")
+        log_msg "DEBUG" "Included all MongoDB databases (including system): ${TARGET_DATABASE_NAMES[*]}"
+    fi
+
+    if [[ "${#TARGET_DATABASE_NAMES[@]}" -eq 0 ]]; then
+        log_msg "WARN" "No databases found to backup after (or without) exclusions."
     fi
     log_msg "DEBUG" "list_all_dbs_mongo function completed."
     return 0
 }
 
+
 backup_dbs_mongo() {
     log_msg "DEBUG" "Starting backup_dbs_mongo function."
-    if [[ "${#TARGET_DATABASE_NAMES[@]}" -eq 0 ]]; then
-        log_msg "WARN" "No databases specified or found to backup for MongoDB. Skipping backup process."
-        return 0
-    fi
-
     local overall_backup_status=0
+    local timestamp db_backup_name dump_output_path tmp_err_file mongodump_cmd
 
-    # Determine if we are backing up all databases or specific ones
-    local mongodump_db_option=""
-    if [[ "${TARGET_ALL_DATABASES:-false}" == "true" ]]; then
-        log_msg "INFO" "Backing up all specified MongoDB databases."
-        # When TARGET_ALL_DATABASES is true, TARGET_DATABASE_NAMES will contain specific DBs or be empty for literally "all"
-        # mongodump without --db argument backs up all databases.
-        # If TARGET_DATABASE_NAMES is populated, we will iterate and back up each one.
-    else
-        log_msg "INFO" "Backing up specific MongoDB databases: ${TARGET_DATABASE_NAMES[*]}"
-    fi
-
-    for db in "${TARGET_DATABASE_NAMES[@]}"; do
-        log_msg "INFO" "Starting backup for MongoDB database: $db"
-        local timestamp=$(date +${BACKUP_TIMESTAMP:-%Y%m%d%H%M%S})
-        local backup_dir_name="mongodb_backup_${db}_${timestamp}"
-        local dump_output_path="$tmp_dir/$backup_dir_name"
-        local tmp_err_file="$tmp_dir/${db}_mongo_err.log"
-
-        local mongodump_cmd="mongodump --config \"$mongo_cnf\" --db \"$db\" --out \"$dump_output_path\""
-
-        if [[ -n "${BACKUP_ADDITIONAL_PARAMS:-}" ]]; then
-            BACKUP_ADDITIONAL_PARAMS=$(echo "${BACKUP_ADDITIONAL_PARAMS}" | tr -s ' ' | sed 's/^ *//;s/ *$//')
-            mongodump_cmd+=" $BACKUP_ADDITIONAL_PARAMS"
+    # Priority 1: Specific collection backups
+    if [[ -n "${TARGET_DB_COLLECTION_PAIRS:-}" ]]; then
+        log_msg "INFO" "Performing collection-level MongoDB backups based on TARGET_DB_COLLECTION_PAIRS."
+        IFS=',' read -ra db_collection_pairs_array <<< "${TARGET_DB_COLLECTION_PAIRS}"
+        if [[ "${#db_collection_pairs_array[@]}" -eq 0 ]]; then
+            log_msg "ERROR" "TARGET_DB_COLLECTION_PAIRS is empty or contains only delimiters."
+            return 1
         fi
 
-        log_msg "DEBUG" "Running mongodump command for $db: $mongodump_cmd"
-        if ! eval "$mongodump_cmd" 2> >(tee "$tmp_err_file" >&2); then
-            log_msg "ERROR" "mongodump failed for database: $db. Error: $(cat "$tmp_err_file" | head -n 1)"
-            rm -rf "$dump_output_path" "$tmp_err_file"
-            overall_backup_status=1
-            continue
-        fi
-        rm -f "$tmp_err_file"
-        log_msg "DEBUG" "MongoDB database backup created at $dump_output_path"
+        for pair in "${db_collection_pairs_array[@]}"; do
+            local db_name=$(echo "$pair" | cut -d':' -f1)
+            local collection_name=$(echo "$pair" | cut -d':' -f2)
 
-        if [[ ! -d "$dump_output_path/$db" ]]; then
-            log_msg "ERROR" "Backup directory for $db is empty or invalid. Expected: $dump_output_path/$db"
-            rm -rf "$dump_output_path"
-            overall_backup_status=1
-            continue
-        fi
-
-        local archive_file="$tmp_dir/${backup_dir_name}.tar.gz"
-        local final_archive_name="${backup_dir_name}.tar.gz"
-
-        if [[ "${BACKUP_COMPRESS:-false}" == "true" ]]; then
-            log_msg "DEBUG" "Compressing $db MongoDB backup directory..."
-            local level="${BACKUP_COMPRESS_LEVEL:-6}"
-            # Create a compressed tar archive of the backup directory
-            if ! tar -czf "$archive_file" -C "$tmp_dir" "$backup_dir_name" 2>/dev/null; then
-                log_msg "ERROR" "Tar compression failed for database: $db."
-                rm -rf "$dump_output_path" "$archive_file"
+            if [[ -z "$db_name" || -z "$collection_name" ]]; then
+                log_msg "ERROR" "Invalid DB:Collection pair: '$pair'. Skipping."
                 overall_backup_status=1
                 continue
             fi
-            log_msg "DEBUG" "Compression completed."
-            rm -rf "$dump_output_path"
-        else
-            log_msg "ERROR" "Compression is mandatory for MongoDB backups for single file upload. Please set BACKUP_COMPRESS=true."
-            rm -rf "$dump_output_path"
-            overall_backup_status=1
-            continue
-        fi
-        
-        local file_to_upload="$archive_file"
-        local final_file_name="$final_archive_name"
 
-        if [[ "${AGE_ENCRYPT:-false}" == "true" ]]; then
-            log_msg "DEBUG" "Encrypting $db MongoDB backup..."
-            if [[ -z "${age_public_key:-}" ]]; then
-                log_msg "ERROR" "Age public key not found for encryption. Skipping encryption for $db."
-                rm -f "$file_to_upload"
+            log_msg "INFO" "Starting backup for MongoDB database: '$db_name', collection: '$collection_name'"
+            timestamp=$(date +${BACKUP_TIMESTAMP:-%Y%m%d%H%M%S})
+            db_backup_name="mongodb_backup_${db_name}_${collection_name}_${timestamp}"
+            dump_output_path="$tmp_dir/$db_backup_name"
+            tmp_err_file="$tmp_dir/${db_name}_${collection_name}_mongo_err.log"
+
+            mongodump_cmd="mongodump --config \"$mongo_cnf\" --db \"$db_name\" --collection \"$collection_name\" --out \"$dump_output_path\""
+            if [[ -n "${BACKUP_ADDITIONAL_PARAMS:-}" ]]; then
+                mongodump_cmd+=" ${BACKUP_ADDITIONAL_PARAMS}"
+            fi
+
+            log_msg "DEBUG" "Running mongodump command for '$db_name':'$collection_name': $mongodump_cmd"
+            if ! eval "$mongodump_cmd" 2> >(tee "$tmp_err_file" >&2); then
+                log_msg "ERROR" "mongodump failed for database: '$db_name', collection: '$collection_name'. Error: $(cat "$tmp_err_file" | head -n 1)"
+                rm -rf "$dump_output_path" "$tmp_err_file"
                 overall_backup_status=1
                 continue
             fi
-            if ! age -a -r "$age_public_key" < "$file_to_upload" > "$file_to_upload.age"; then
-                log_msg "ERROR" "Age encryption failed for database: $db."
-                rm -f "$file_to_upload" "$file_to_upload.age"
-                overall_backup_status=1
-                continue
+            rm -f "$tmp_err_file"
+            log_msg "DEBUG" "MongoDB collection backup created at $dump_output_path"
+
+            if ! process_mongo_backup_file "$dump_output_path" "$db_backup_name" "${db_name}_${collection_name}" ; then
+                 overall_backup_status=1
             fi
-            log_msg "DEBUG" "Age encryption completed."
-            rm -f "$file_to_upload"
-            file_to_upload="$file_to_upload.age"
-            final_file_name="$final_file_name.age"
-        fi
+        done
 
-        local cdate cyear cmonth
-        cdate=$(date -u)
-        cyear=$(date --date="$cdate" +%Y)
-        cmonth=$(date --date="$cdate" +%m)
+    # Priority 2: Full database backup (all databases, or filtered user dbs)
+    elif [[ "${TARGET_ALL_DATABASES:-false}" == "true" ]]; then
+        if [[ "${INCLUDE_SYSTEM_DATABASES:-false}" == "true" ]]; then
+            log_msg "INFO" "Performing full MongoDB backup (all databases including system) as TARGET_ALL_DATABASES=true and INCLUDE_SYSTEM_DATABASES=true."
+            timestamp=$(date +${BACKUP_TIMESTAMP:-%Y%m%d%H%M%S})
+            db_backup_name="mongodb_backup_full_${timestamp}"
+            dump_output_path="$tmp_dir/$db_backup_name"
+            tmp_err_file="$tmp_dir/mongo_full_err.log"
 
-        if [[ "${CLOUD_UPLOAD:-false}" == "true" ]]; then
-            log_msg "DEBUG" "Uploading $db backup to cloud S3..."
-            local s3_error
-            s3_error=$(aws --endpoint-url="$cloud_s3_url" \
-                s3 cp "$file_to_upload" "s3://$cloud_s3_bucket$cloud_s3_bucket_path/$cyear/$cmonth/$final_file_name" \
-                --profile cloud 2>&1)
-            aws_exit_status=$?
-            if [[ $aws_exit_status -ne 0 ]]; then
-                log_msg "ERROR" "Cloud S3 upload failed for database: $db. Error: $s3_error"
+            # No --db or --collection for a full dump
+            mongodump_cmd="mongodump --config \"$mongo_cnf\" --out \"$dump_output_path\""
+            if [[ -n "${BACKUP_ADDITIONAL_PARAMS:-}" ]]; then
+                mongodump_cmd+=" ${BACKUP_ADDITIONAL_PARAMS}"
+            fi
+
+            log_msg "DEBUG" "Running mongodump command for full backup: $mongodump_cmd"
+            if ! eval "$mongodump_cmd" 2> >(tee "$tmp_err_file" >&2); then
+                log_msg "ERROR" "mongodump failed for full backup. Error: $(cat "$tmp_err_file" | head -n 1)"
+                rm -rf "$dump_output_path" "$tmp_err_file"
                 overall_backup_status=1
             else
-                log_msg "INFO" "Cloud upload completed for $db: $cloud_s3_bucket$cloud_s3_bucket_path/$cyear/$cmonth/$final_file_name Output: $s3_error"
-            fi
-        fi        
-
-        if [[ "${LOCAL_UPLOAD:-false}" == "true" ]]; then
-            log_msg "DEBUG" "Uploading $db backup to local S3..."
-            if [[ "${CLOUD_UPLOAD:-false}" == "true" && "$cloud_s3_url" == "$local_s3_url" && \
-                "$cloud_s3_bucket" == "$local_s3_bucket" && "$cloud_s3_bucket_path" == "$local_s3_bucket_path" ]]; then
-                log_msg "DEBUG" "Local and cloud S3 destinations are identical; skipping duplicate upload for $db."
-            else
-                local s3_error aws_exit_status original_sig_version
-                
-                original_sig_version=$(aws configure get s3.signature_version --profile local || echo "s4")
-                
-                if [[ "${LOCAL_S3_SIGNATURE_VERSION:-s4}" == "s3" ]]; then
-                    aws configure set s3.signature_version s3 --profile local
-                    log_msg "DEBUG" "Set Signature Version 2 for local S3 upload (endpoint: $local_s3_url)"
-                else
-                    log_msg "DEBUG" "Using Signature Version 4 for local S3 upload (endpoint: $local_s3_url)"
-                fi
-                
-                s3_error=$(aws --endpoint-url="$local_s3_url" \
-                    s3 cp "$file_to_upload" "s3://$local_s3_bucket$local_s3_bucket_path/$cyear/$cmonth/$final_file_name" \
-                    --profile local 2>&1)
-                aws_exit_status=$?
-                if [[ $aws_exit_status -ne 0 ]]; then
-                    log_msg "ERROR" "Local S3 upload failed for database: $db. Error: $s3_error"
+                rm -f "$tmp_err_file"
+                log_msg "DEBUG" "MongoDB full backup created at $dump_output_path"
+                if ! process_mongo_backup_file "$dump_output_path" "$db_backup_name" "full_database_dump"; then
                     overall_backup_status=1
-                else
-                    log_msg "INFO" "Local upload completed for $db: $local_s3_bucket$local_s3_bucket_path/$cyear/$cmonth/$final_file_name Output: $s3_error"
                 fi
             fi
+        else # TARGET_ALL_DATABASES=true but INCLUDE_SYSTEM_DATABASES is false/unset
+            log_msg "INFO" "Performing all user MongoDB databases backup based on TARGET_ALL_DATABASES=true."
+            # TARGET_DATABASE_NAMES will be populated by list_all_dbs_mongo, filtered for user dbs
+            if [[ "${#TARGET_DATABASE_NAMES[@]}" -eq 0 ]]; then
+                log_msg "WARN" "No user databases found to backup. Skipping database-level backup."
+                return 0
+            fi
+
+            for db in "${TARGET_DATABASE_NAMES[@]}"; do
+                log_msg "INFO" "Starting backup for MongoDB database: $db"
+                timestamp=$(date +${BACKUP_TIMESTAMP:-%Y%m%d%H%M%S})
+                db_backup_name="mongodb_backup_${db}_${timestamp}"
+                dump_output_path="$tmp_dir/$db_backup_name"
+                tmp_err_file="$tmp_dir/${db}_mongo_err.log"
+
+                mongodump_cmd="mongodump --config \"$mongo_cnf\" --db \"$db\" --out \"$dump_output_path\""
+                if [[ -n "${BACKUP_ADDITIONAL_PARAMS:-}" ]]; then
+                    mongodump_cmd+=" ${BACKUP_ADDITIONAL_PARAMS}"
+                fi
+
+                log_msg "DEBUG" "Running mongodump command for $db: $mongodump_cmd"
+                if ! eval "$mongodump_cmd" 2> >(tee "$tmp_err_file" >&2); then
+                    log_msg "ERROR" "mongodump failed for database: $db. Error: $(cat "$tmp_err_file" | head -n 1)"
+                    rm -rf "$dump_output_path" "$tmp_err_file"
+                    overall_backup_status=1
+                    continue
+                fi
+                rm -f "$tmp_err_file"
+                log_msg "DEBUG" "MongoDB database backup created at $dump_output_path"
+
+                if ! process_mongo_backup_file "$dump_output_path" "$db_backup_name" "$db" ; then
+                    overall_backup_status=1
+                fi
+            done
         fi
-        rm -f "$file_to_upload"
-        log_msg "INFO" "Finished processing database: $db"
-    done
+
+    # Priority 3: Specific database backups
+    elif [[ -n "${TARGET_DATABASE_NAMES:-}" ]]; then
+        log_msg "INFO" "Performing specific MongoDB database backups based on TARGET_DATABASE_NAMES."
+        IFS=',' read -ra TARGET_DATABASE_NAMES_ARRAY <<< "${TARGET_DATABASE_NAMES}"
+        if [[ "${#TARGET_DATABASE_NAMES_ARRAY[@]}" -eq 0 ]]; then
+            log_msg "ERROR" "TARGET_DATABASE_NAMES is empty or contains only delimiters for MongoDB."
+            return 1
+        fi
+
+        for db in "${TARGET_DATABASE_NAMES_ARRAY[@]}"; do
+            log_msg "INFO" "Starting backup for MongoDB database: $db"
+            timestamp=$(date +${BACKUP_TIMESTAMP:-%Y%m%d%H%M%S})
+            db_backup_name="mongodb_backup_${db}_${timestamp}"
+            dump_output_path="$tmp_dir/$db_backup_name"
+            tmp_err_file="$tmp_dir/${db}_mongo_err.log"
+
+            mongodump_cmd="mongodump --config \"$mongo_cnf\" --db \"$db\" --out \"$dump_output_path\""
+            if [[ -n "${BACKUP_ADDITIONAL_PARAMS:-}" ]]; then
+                mongodump_cmd+=" ${BACKUP_ADDITIONAL_PARAMS}"
+            fi
+
+            log_msg "DEBUG" "Running mongodump command for $db: $mongodump_cmd"
+            if ! eval "$mongodump_cmd" 2> >(tee "$tmp_err_file" >&2); then
+                log_msg "ERROR" "mongodump failed for database: $db. Error: $(cat "$tmp_err_file" | head -n 1)"
+                rm -rf "$dump_output_path" "$tmp_err_file"
+                overall_backup_status=1
+                continue
+            fi
+            rm -f "$tmp_err_file"
+            log_msg "DEBUG" "MongoDB database backup created at $dump_output_path"
+
+            if ! process_mongo_backup_file "$dump_output_path" "$db_backup_name" "$db" ; then
+                overall_backup_status=1
+            fi
+        done
+    else
+        log_msg "ERROR" "No MongoDB backup targets specified. Please set TARGET_DB_COLLECTION_PAIRS, TARGET_ALL_DATABASES, or TARGET_DATABASE_NAMES."
+        return 1
+    fi
 
     log_msg "DEBUG" "Backup process completed."
     return "$overall_backup_status"
+}
+
+# New helper function to process a single MongoDB backup directory (compress, encrypt, upload)
+process_mongo_backup_file() {
+    local dump_output_path="$1"
+    local backup_dir_name="$2"
+    local identifier="$3" # e.g., actual db name or "full_database_dump" or "db_collection"
+
+    local archive_file="$tmp_dir/${backup_dir_name}.tar.gz"
+    local final_archive_name="${backup_dir_name}.tar.gz"
+
+    if [[ "${BACKUP_COMPRESS:-false}" == "true" ]]; then
+        log_msg "DEBUG" "Compressing '$identifier' MongoDB backup directory..."
+        local level="${BACKUP_COMPRESS_LEVEL:-6}"
+        # Create a compressed tar archive of the backup directory
+        if ! tar -czf "$archive_file" -C "$tmp_dir" "$backup_dir_name" 2>/dev/null; then
+            log_msg "ERROR" "Tar compression failed for backup: '$identifier'."
+            rm -rf "$dump_output_path" "$archive_file"
+            return 1
+        fi
+        log_msg "DEBUG" "Compression completed."
+        rm -rf "$dump_output_path" # Clean up uncompressed dump
+    else
+        # For MongoDB, mongodump creates a directory structure, which is not ideal for direct S3 upload of a single object.
+        # Compression into a single tar.gz file is almost always desired.
+        log_msg "ERROR" "Compression is mandatory for MongoDB backups for single file upload. Please set BACKUP_COMPRESS=true."
+        rm -rf "$dump_output_path"
+        return 1
+    fi
+    
+    local file_to_upload="$archive_file"
+    local final_file_name="$final_archive_name"
+
+    if [[ "${AGE_ENCRYPT:-false}" == "true" ]]; then
+        log_msg "DEBUG" "Encrypting '$identifier' MongoDB backup..."
+        if [[ -z "${age_public_key:-}" ]]; then
+            log_msg "ERROR" "Age public key not found for encryption. Skipping encryption for '$identifier'."
+            rm -f "$file_to_upload"
+            return 1
+        fi
+        if ! age -a -r "$age_public_key" < "$file_to_upload" > "$file_to_upload.age"; then
+            log_msg "ERROR" "Age encryption failed for backup: '$identifier'."
+            rm -f "$file_to_upload" "$file_to_upload.age"
+            return 1
+        fi
+        log_msg "DEBUG" "Age encryption completed."
+        rm -f "$file_to_upload" # Remove unencrypted archive
+        file_to_upload="$file_to_upload.age"
+        final_file_name="$final_file_name.age"
+    fi
+
+    local cdate cyear cmonth
+    cdate=$(date -u)
+    cyear=$(date --date="$cdate" +%Y)
+    cmonth=$(date --date="$cdate" +%m)
+
+    if [[ "${CLOUD_UPLOAD:-false}" == "true" ]]; then
+        log_msg "DEBUG" "Uploading '$identifier' backup to cloud S3..."
+        local s3_error
+        s3_error=$(aws --endpoint-url="$cloud_s3_url" \
+            s3 cp "$file_to_upload" "s3://$cloud_s3_bucket$cloud_s3_bucket_path/$cyear/$cmonth/$final_file_name" \
+            --profile cloud 2>&1)
+        aws_exit_status=$?
+        if [[ $aws_exit_status -ne 0 ]]; then
+            log_msg "ERROR" "Cloud S3 upload failed for backup: '$identifier'. Error: $s3_error"
+            rm -f "$file_to_upload" # Clean up even on upload fail for cloud
+            return 1
+        else
+            log_msg "INFO" "Cloud upload completed for '$identifier': s3://$cloud_s3_bucket$cloud_s3_bucket_path/$cyear/$cmonth/$final_file_name Output: $s3_error"
+        fi
+    fi        
+
+    if [[ "${LOCAL_UPLOAD:-false}" == "true" ]]; then
+        log_msg "DEBUG" "Uploading '$identifier' backup to local S3..."
+        if [[ "${CLOUD_UPLOAD:-false}" == "true" && "$cloud_s3_url" == "$local_s3_url" && \
+            "$cloud_s3_bucket" == "$local_s3_bucket" && "$cloud_s3_bucket_path" == "$local_s3_bucket_path" ]]; then
+            log_msg "DEBUG" "Local and cloud S3 destinations are identical; skipping duplicate upload for '$identifier'."
+        else
+            local s3_error aws_exit_status original_sig_version
+            
+            original_sig_version=$(aws configure get s3.signature_version --profile local || echo "s4") # Default to s4 if not set
+            
+            if [[ "${LOCAL_S3_SIGNATURE_VERSION:-s4}" == "s3" ]]; then
+                aws configure set s3.signature_version s3 --profile local
+                log_msg "DEBUG" "Set Signature Version 2 for local S3 upload (endpoint: $local_s3_url)"
+            else
+                log_msg "DEBUG" "Using Signature Version 4 for local S3 upload (endpoint: $local_s3_url)"
+            fi
+            
+            s3_error=$(aws --endpoint-url="$local_s3_url" \
+                s3 cp "$file_to_upload" "s3://$local_s3_bucket$local_s3_bucket_path/$cyear/$cmonth/$final_file_name" \
+                --profile local 2>&1)
+            aws_exit_status=$?
+            if [[ $aws_exit_status -ne 0 ]]; then
+                log_msg "ERROR" "Local S3 upload failed for backup: '$identifier'. Error: $s3_error"
+                rm -f "$file_to_upload" # Clean up even on upload fail for local
+                return 1
+            else
+                log_msg "INFO" "Local upload completed for '$identifier': s3://$local_s3_bucket$local_s3_bucket_path/$cyear/$cmonth/$final_file_name Output: $s3_error"
+            fi
+            
+            # Restore original S3 signature version if it was changed
+            if [[ "${LOCAL_S3_SIGNATURE_VERSION:-s4}" == "s3" && "$original_sig_version" != "s3" ]]; then
+                aws configure set s3.signature_version "$original_sig_version" --profile local
+                log_msg "DEBUG" "Restored original Signature Version: $original_sig_version for local S3 profile."
+            fi
+        fi
+    fi
+    rm -f "$file_to_upload" # Clean up after successful upload
+    log_msg "INFO" "Finished processing backup for: '$identifier'"
+    return 0
 }
 
 main() {
@@ -559,34 +645,37 @@ main() {
     local status=$?
     log_msg "DEBUG" "get_vault_items_n_set_s3_profiles completed with status: $status"
     if [[ "$status" -ne 0 ]]; then
-        log_msg "ERROR" "Vault/S3 configuration failed."
+        log_msg "ERROR" "Vault/S3 configuration failed. Exiting."
+        exit 1 # Fatal error, cannot proceed without credentials
+    fi
+
+    # Determine backup strategy based on environment variables
+    # Priority: TARGET_DB_COLLECTION_PAIRS > TARGET_ALL_DATABASES > TARGET_DATABASE_NAMES
+
+    # If TARGET_DB_COLLECTION_PAIRS is set, no need to list databases
+    if [[ -z "${TARGET_DB_COLLECTION_PAIRS:-}" ]]; then
+        # If TARGET_ALL_DATABASES is true, we might need to list databases (unless doing a full dump)
+        if [[ "${TARGET_ALL_DATABASES:-false}" == "true" && "${INCLUDE_SYSTEM_DATABASES:-false}" != "true" ]]; then
+            log_msg "DEBUG" "Calling list_all_dbs_mongo to get user databases..."
+            list_all_dbs_mongo
+            status=$?
+            log_msg "DEBUG" "list_all_dbs_mongo completed with status: $status"
+            if [[ "$status" -ne 0 ]]; then
+                log_msg "ERROR" "Listing MongoDB databases failed for 'all user databases' strategy. Exiting."
+                exit 1 # Cannot proceed if we can't determine databases for this strategy
+            fi
+        fi
+    else
+        log_msg "INFO" "TARGET_DB_COLLECTION_PAIRS is set. Prioritizing collection-level backup. Ignoring other TARGET_* settings."
+    fi
+
+    log_msg "DEBUG" "Calling backup_dbs_mongo..."
+    backup_dbs_mongo
+    status=$?
+    log_msg "DEBUG" "backup_dbs_mongo completed with status: $status"
+    if [[ "$status" -ne 0 ]]; then
+        log_msg "ERROR" "One or more MongoDB backups failed."
         overall_script_status=1
-    fi
-
-    if [[ "$overall_script_status" -eq 0 ]]; then
-        log_msg "DEBUG" "Calling list_all_dbs_mongo..."
-        list_all_dbs_mongo
-        status=$?
-        log_msg "DEBUG" "list_all_dbs_mongo completed with status: $status"
-        if [[ "$status" -ne 0 ]]; then
-            log_msg "ERROR" "Listing MongoDB databases failed."
-            overall_script_status=1
-        fi
-    else
-        log_msg "WARN" "Skipping list_all_dbs_mongo due to previous failure."
-    fi
-
-    if [[ "$overall_script_status" -eq 0 || "${#TARGET_DATABASE_NAMES[@]}" -gt 0 ]]; then
-        log_msg "DEBUG" "Calling backup_dbs_mongo..."
-        backup_dbs_mongo
-        status=$?
-        log_msg "DEBUG" "backup_dbs_mongo completed with status: $status"
-        if [[ "$status" -ne 0 ]]; then
-            log_msg "WARN" "One or more MongoDB database backups failed."
-            overall_script_status=1
-        fi
-    else
-        log_msg "WARN" "Skipping backup_dbs_mongo as no databases were found or specified."
     fi
 
     log_msg "INFO" "Script finished main tasks."
