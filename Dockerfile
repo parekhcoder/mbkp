@@ -54,17 +54,17 @@ RUN apt-get update && \
     # Install Python packages
     pip3 install --break-system-packages --no-cache-dir --upgrade awscli s3cmd python-magic
 
-ENV CLOUD_SDK_VERSION=367.0.0 # This env var is not used in the Dockerfile
+ENV CLOUD_SDK_VERSION=367.0.0 
 # Release commit for https://github.com/FiloSottile/age/tree/v1.0.0
 ENV AGE_VERSION=552aa0a07de0b42c16126d3107bd8895184a69e7
-ENV BACKUP_PROVIDER=aws # This env var is not used in the Dockerfile
+ENV BACKUP_PROVIDER=aws 
 
 # Install FiloSottile/age (https://github.com/FiloSottile/age)
 RUN git clone https://filippo.io/age /usr/src/age && \
     cd /usr/src/age && \
     git checkout $AGE_VERSION && \
     go build -o /usr/local/bin/age filippo.io/age/cmd/age && \
-    rm -rf /usr/src/age # Clean up git repo after build
+    rm -rf /usr/src/age 
 
 # Copy backup script and execute permissions
 COPY resources/backup.sh /app/backup.sh
