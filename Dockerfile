@@ -37,7 +37,7 @@ RUN apt-get update && \
         libc6 && \
     # Install Google Cloud SDK
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
-    curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add - && \
+    curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
     apt-get update && \
     apt-get install -y google-cloud-sdk && \
     gcloud config set core/disable_usage_reporting true && \
@@ -54,16 +54,21 @@ RUN apt-get update && \
     # Install Python packages
     pip3 install --break-system-packages --no-cache-dir --upgrade awscli s3cmd python-magic
 
-ENV CLOUD_SDK_VERSION=367.0.0 
+ENV CLOUD_SDK_VERSION=367.0.0
 # Release commit for https://github.com/FiloSottile/age/tree/v1.0.0
 ENV AGE_VERSION=552aa0a07de0b42c16126d3107bd8895184a69e7
-ENV BACKUP_PROVIDER=aws 
+ENV BACKUP_PROVIDER=aws
 
 # Install FiloSottile/age (https://github.com/FiloSottile/age)
-RUN git clone https://filippo.io/age && \
-    cd age && \
+RUN git clone https://filippo.io/age /usr/src/age && \
+    cd /usr/src/age && \
     git checkout $AGE_VERSION && \
-    go build -o . filippo.io/age/cmd/... && cp age /usr/local/bin/    
+    # Initialize and download Go modules for the age project
+    go mod init filippo.io/age && \
+    go mod tidy && \
+    # Build and install the age binary
+    go build -o /usr/local/bin/age ./cmd/age && \
+    rm -rf /usr/src/age
 
 # Copy backup script and execute permissions
 COPY resources/backup.sh /app/backup.sh
@@ -74,6 +79,6 @@ RUN chmod +x /app/setup_cron.sh
 
 # This creates the /app/log directory, where your script's main log file will reside.
 # Ensure it's writable by the user running the cron job (usually root in Docker).
-RUN chmod 777 /app/log
+RUN mkdir -p /app/log && chmod 777 /app/log
 
 CMD ["/app/setup_cron.sh"]
