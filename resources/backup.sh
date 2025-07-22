@@ -265,13 +265,13 @@ get_vault_items_n_set_s3_profiles() {
     fi
     log_msg "DEBUG" "Mongo details retrieved."    
     
-    if [[ -n "$mongo_config_extra" ]]; then
-        echo "$mongo_config_extra" >> "$mongo_cnf"
-    fi
-    chmod 600 "$mongo_cnf" || {
-        log_msg "ERROR" "Failed to set permissions on Mongo config file."
-        return 1
-    }
+  #  if [[ -n "$mongo_config_extra" ]]; then
+  #      echo "$mongo_config_extra" >> "$mongo_cnf"
+  #  fi
+  #  chmod 600 "$mongo_cnf" || {
+  #      log_msg "ERROR" "Failed to set permissions on Mongo config file."
+  #      return 1
+  #  }
 
     log_msg "DEBUG" "Vault items retrieved and S3 profiles configured."
     return 0
