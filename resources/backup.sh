@@ -256,20 +256,14 @@ get_vault_items_n_set_s3_profiles() {
     mongo_user=$(jq -r '.fields[] | select(.label=="user") | .value' <<< "$mongo_item")
     mongo_password=$(jq -r '.fields[] | select(.label=="pass") | .value' <<< "$mongo_item")
     mongo_auth_db=$(jq -r '.fields[] | select(.label=="authenticationDatabase") | .value' <<< "$mongo_item")
-    mongo_config_extra=$(jq -r '.fields[] | select(.label=="config") | .value' <<< "$mongo_item")
+    mongo_cnf=$(jq -r '.fields[] | select(.label=="config") | .value' <<< "$mongo_item")
 
     if [[ -z "$mongo_uri" || -z "$mongo_user" || -z "$mongo_password" || -z "$mongo_auth_db" ]]; then
         log_msg "ERROR" "Missing fields in Mongo item (URI, user, password, or authenticationDatabase)."
         return 1
     fi
-    log_msg "DEBUG" "Mongo details retrieved."
-
-    # Create mongodump config file for secure credentials
-    mongo_cnf="$tmp_dir/mongo.cnf"
-   cat > "$mongo_cnf" << EOF
-password: "$mongo_password"
-uri: "$mongo_uri"
-EOF
+    log_msg "DEBUG" "Mongo details retrieved."    
+    
     if [[ -n "$mongo_config_extra" ]]; then
         echo "$mongo_config_extra" >> "$mongo_cnf"
     fi
