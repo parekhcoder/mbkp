@@ -9,7 +9,7 @@ for tool in jq aws mongodump gzip age curl sleep tee sync; do
         echo "ERROR: $tool is not installed." >&2
         exit 1
     fi
-fi
+done
 
 # Define default log directory early
 LOG_DIR_PATH="${LOG_DIR:-/app/log}"
