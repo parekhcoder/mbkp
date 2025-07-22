@@ -266,11 +266,9 @@ get_vault_items_n_set_s3_profiles() {
 
     # Create mongodump config file for secure credentials
     mongo_cnf="$tmp_dir/mongo.cnf"
-    cat > "$mongo_cnf" << EOF
-uri=$mongo_uri
-username=$mongo_user
-password=$mongo_password
-authenticationDatabase=$mongo_auth_db
+   cat > "$mongo_cnf" << EOF
+password: "$mongo_password"
+uri: "$mongo_uri"
 EOF
     if [[ -n "$mongo_config_extra" ]]; then
         echo "$mongo_config_extra" >> "$mongo_cnf"
@@ -300,6 +298,7 @@ list_all_dbs_mongo() {
 
     if ! mapfile -t db_list_raw < <(eval "$mongosh_cmd" 2>&1); then
         log_msg "ERROR" "Failed to list MongoDB databases. Ensure mongosh can connect using the provided URI and credentials."
+        log_msg "ERROR" "mongosh output: $(eval "$mongosh_cmd")" # Log the output for debugging
         return 1
     fi
 
@@ -336,7 +335,16 @@ list_all_dbs_mongo() {
 backup_dbs_mongo() {
     log_msg "DEBUG" "Starting backup_dbs_mongo function."
     local overall_backup_status=0
-    local timestamp db_backup_name dump_output_path tmp_err_file mongodump_cmd
+    local timestamp db_backup_name dump_output_path tmp_err_file mongodump_cmd mongodump_cmd_base
+
+    # Build the base mongodump command with --config, --username, --authenticationDatabase
+    # These parameters are common to all mongodump calls and are not part of the config file.
+    mongodump_cmd_base="mongodump --config \"$mongo_cnf\" --username \"$mongo_user\" --authenticationDatabase \"$mongo_auth_db\""
+
+    # Add any additional parameters passed via environment variable
+    if [[ -n "${BACKUP_ADDITIONAL_PARAMS:-}" ]]; then
+        mongodump_cmd_base+=" ${BACKUP_ADDITIONAL_PARAMS}"
+    fi
 
     # Priority 1: Specific collection backups
     if [[ -n "${TARGET_DB_COLLECTION_PAIRS:-}" ]]; then
@@ -363,7 +371,7 @@ backup_dbs_mongo() {
             dump_output_path="$tmp_dir/$db_backup_name"
             tmp_err_file="$tmp_dir/${db_name}_${collection_name}_mongo_err.log"
 
-            mongodump_cmd="mongodump --config \"$mongo_cnf\" --db \"$db_name\" --collection \"$collection_name\" --out \"$dump_output_path\""
+            mongodump_cmd="${mongodump_cmd_base} --db \"$db_name\" --collection \"$collection_name\" --out \"$dump_output_path\""
             if [[ -n "${BACKUP_ADDITIONAL_PARAMS:-}" ]]; then
                 mongodump_cmd+=" ${BACKUP_ADDITIONAL_PARAMS}"
             fi
@@ -393,7 +401,7 @@ backup_dbs_mongo() {
             tmp_err_file="$tmp_dir/mongo_full_err.log"
 
             # No --db or --collection for a full dump
-            mongodump_cmd="mongodump --config \"$mongo_cnf\" --out \"$dump_output_path\""
+            mongodump_cmd="${mongodump_cmd_base} --out \"$dump_output_path\""
             if [[ -n "${BACKUP_ADDITIONAL_PARAMS:-}" ]]; then
                 mongodump_cmd+=" ${BACKUP_ADDITIONAL_PARAMS}"
             fi
@@ -425,7 +433,7 @@ backup_dbs_mongo() {
                 dump_output_path="$tmp_dir/$db_backup_name"
                 tmp_err_file="$tmp_dir/${db}_mongo_err.log"
 
-                mongodump_cmd="mongodump --config \"$mongo_cnf\" --db \"$db\" --out \"$dump_output_path\""
+                mongodump_cmd="${mongodump_cmd_base} --db \"$db\" --out \"$dump_output_path\""
                 if [[ -n "${BACKUP_ADDITIONAL_PARAMS:-}" ]]; then
                     mongodump_cmd+=" ${BACKUP_ADDITIONAL_PARAMS}"
                 fi
