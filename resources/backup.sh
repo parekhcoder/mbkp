@@ -257,6 +257,7 @@ get_vault_items_n_set_s3_profiles() {
     mongo_password=$(jq -r '.fields[] | select(.label=="pass") | .value' <<< "$mongo_item")
     mongo_auth_db=$(jq -r '.fields[] | select(.label=="authenticationDatabase") | .value' <<< "$mongo_item")
     mongo_cnf=$(jq -r '.fields[] | select(.label=="config") | .value' <<< "$mongo_item")
+    echo "$mongo_cnf" > mongoConfig.conf
 
     if [[ -z "$mongo_uri" || -z "$mongo_user" || -z "$mongo_password" || -z "$mongo_auth_db" ]]; then
         log_msg "ERROR" "Missing fields in Mongo item (URI, user, password, or authenticationDatabase)."
@@ -333,7 +334,7 @@ backup_dbs_mongo() {
 
     # Build the base mongodump command with --config, --username, --authenticationDatabase
     # These parameters are common to all mongodump calls and are not part of the config file.
-    mongodump_cmd_base="mongodump --config \"$mongo_cnf\" --username \"$mongo_user\" --authenticationDatabase \"$mongo_auth_db\""
+    mongodump_cmd_base="mongodump --config mongoConfig.conf --username \"$mongo_user\" --authenticationDatabase \"$mongo_auth_db\""
 
     # Add any additional parameters passed via environment variable
     if [[ -n "${BACKUP_ADDITIONAL_PARAMS:-}" ]]; then
