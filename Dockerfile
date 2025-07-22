@@ -60,11 +60,10 @@ ENV AGE_VERSION=552aa0a07de0b42c16126d3107bd8895184a69e7
 ENV BACKUP_PROVIDER=aws 
 
 # Install FiloSottile/age (https://github.com/FiloSottile/age)
-RUN git clone https://filippo.io/age /usr/src/age && \
-    cd /usr/src/age && \
+RUN git clone https://filippo.io/age && \
+    cd age && \
     git checkout $AGE_VERSION && \
-    go build -o /usr/local/bin/age filippo.io/age/cmd/age && \
-    rm -rf /usr/src/age 
+    go build -o . filippo.io/age/cmd/... && cp age /usr/local/bin/    
 
 # Copy backup script and execute permissions
 COPY resources/backup.sh /app/backup.sh
