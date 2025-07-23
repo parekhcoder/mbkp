@@ -256,7 +256,11 @@ get_vault_items_n_set_s3_profiles() {
     mongo_user=$(jq -r '.fields[] | select(.label=="user") | .value' <<< "$mongo_item")
     mongo_password=$(jq -r '.fields[] | select(.label=="pass") | .value' <<< "$mongo_item")
     mongo_auth_db=$(jq -r '.fields[] | select(.label=="authenticationDatabase") | .value' <<< "$mongo_item")
-    mongo_cnf=$(jq -r '.fields[] | select(.label=="config") | .value' <<< "$mongo_item")
+    mongo_host=$(jq -r '.fields[] | select(.label=="host") | .value' <<< "$mongo_item")
+    #mongo_cnf=$(jq -r '.fields[] | select(.label=="config") | .value' <<< "$mongo_item")
+    mongo_cnf="$mongo_password"
+    mongo_cnf+="\n$mongo_host"
+    
     echo "$mongo_cnf" > mongoConfig.conf
 
     if [[ -z "$mongo_uri" || -z "$mongo_user" || -z "$mongo_password" || -z "$mongo_auth_db" ]]; then
