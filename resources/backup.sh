@@ -259,7 +259,7 @@ get_vault_items_n_set_s3_profiles() {
     mongo_host=$(jq -r '.fields[] | select(.label=="host") | .value' <<< "$mongo_item")
     #mongo_cnf=$(jq -r '.fields[] | select(.label=="config") | .value' <<< "$mongo_item")
     cat << EOF > mongoConfig.conf
-pass: $mongo_password
+password: $mongo_password
 uri: $mongo_host
 EOF
     
