@@ -258,8 +258,8 @@ get_vault_items_n_set_s3_profiles() {
     mongo_auth_db=$(jq -r '.fields[] | select(.label=="authenticationDatabase") | .value' <<< "$mongo_item")
     mongo_host=$(jq -r '.fields[] | select(.label=="host") | .value' <<< "$mongo_item")
     #mongo_cnf=$(jq -r '.fields[] | select(.label=="config") | .value' <<< "$mongo_item")
-    mongo_cnf="$mongo_password"
-    mongo_cnf+="\n$mongo_host"
+    mongo_cnf=" $mongo_password"
+    mongo_cnf+="\n $mongo_host"
 
     echo "mongo cnf......: $mongo_cnf"
     
