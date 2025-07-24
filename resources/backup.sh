@@ -588,7 +588,7 @@ process_mongo_backup_file() {
             
             s3_error=$(aws --endpoint-url="$local_s3_url" \
                 s3 cp "$file_to_upload" "s3://$local_s3_bucket$local_s3_bucket_path/$cyear/$cmonth/$final_file_name" \
-                --profile local 2>&1)
+                --profile local --debug 2>&1)
             aws_exit_status=$?
             if [[ $aws_exit_status -ne 0 ]]; then
                 log_msg "ERROR" "Local S3 upload failed for backup: '$identifier'. Error: $s3_error"
