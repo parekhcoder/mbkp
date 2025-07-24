@@ -258,12 +258,12 @@ get_vault_items_n_set_s3_profiles() {
     mongo_auth_db=$(jq -r '.fields[] | select(.label=="authenticationDatabase") | .value' <<< "$mongo_item")
     mongo_host=$(jq -r '.fields[] | select(.label=="host") | .value' <<< "$mongo_item")
     #mongo_cnf=$(jq -r '.fields[] | select(.label=="config") | .value' <<< "$mongo_item")
-    mongo_cnf="password: $mongo_password"
-    mongo_cnf+="\nuri: $mongo_host"
+    cat << EOF > mongoConfig.conf
+pass: $mongo_password
+uri: $mongo_host
+EOF
     
-    echo "mongo cnf......: $mongo_cnf"
-    
-    echo "$mongo_cnf" > mongoConfig.conf
+    echo "YAML file 'mongoConfig.conf' created successfully."
 
     if [[ -z "$mongo_uri" || -z "$mongo_user" || -z "$mongo_password" || -z "$mongo_auth_db" ]]; then
         log_msg "ERROR" "Missing fields in Mongo item (URI, user, password, or authenticationDatabase)."
