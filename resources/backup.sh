@@ -580,7 +580,7 @@ process_mongo_backup_file() {
             original_sig_version=$(aws configure get s3.signature_version --profile local || echo "s4") # Default to s4 if not set
             
             if [[ "${LOCAL_S3_SIGNATURE_VERSION:-s4}" == "s3" ]]; then
-                aws configure set s3.signature_version s3 --profile local
+                aws configure set s3.signature_version s3v2 --profile local
                 log_msg "DEBUG" "Set Signature Version 2 for local S3 upload (endpoint: $local_s3_url)"
             else
                 log_msg "DEBUG" "Using Signature Version 4 for local S3 upload (endpoint: $local_s3_url)"
