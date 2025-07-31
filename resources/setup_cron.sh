@@ -76,7 +76,7 @@ cat "$ENV_FILE" # Print its content for verification in logs
 # This ensures all necessary environment variables are set for backup.sh.
 # We also redirect stdout and stderr to the log file for proper logging.
 
-CRONTAB_ENTRY="${CRON_SCHEDULE} /bin/bash -c \"source $ENV_FILE && /app/backup.sh >> ${LOG_DIR_PATH}/cron.log 2>&1\""
+CRONTAB_ENTRY="${CRON_SCHEDULE} /bin/bash -c \"source $ENV_FILE && /app/backup.sh > /dev/null 2>&1\""
 
 # Add the cron job to crontab
 # Using echo with a here document for clean multi-line injection
