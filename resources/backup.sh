@@ -565,7 +565,7 @@ process_mongo_backup_file() {
             rm -f "$file_to_upload" # Clean up even on upload fail for cloud
             return 1
         else
-            log_msg "INFO" "Cloud upload completed for '$identifier': s3://$cloud_s3_bucket$cloud_s3_bucket_path/$cyear/$cmonth/$final_file_name Output: $s3_error"
+            log_msg "INFO" "Cloud upload completed for '$identifier': s3://$cloud_s3_bucket$cloud_s3_bucket_path/$cyear/$cmonth/$final_file_name #Output: $s3_error"
         fi
     fi        
 
@@ -588,14 +588,14 @@ process_mongo_backup_file() {
             
             s3_error=$(aws --endpoint-url="$local_s3_url" \
                 s3 cp "$file_to_upload" "s3://$local_s3_bucket$local_s3_bucket_path/$cyear/$cmonth/$final_file_name" \
-                --profile local --debug 2>&1)
+                --profile local 2>&1)
             aws_exit_status=$?
             if [[ $aws_exit_status -ne 0 ]]; then
                 log_msg "ERROR" "Local S3 upload failed for backup: '$identifier'. Error: $s3_error"
                 rm -f "$file_to_upload" # Clean up even on upload fail for local
                 return 1
             else
-                log_msg "INFO" "Local upload completed for '$identifier': s3://$local_s3_bucket$local_s3_bucket_path/$cyear/$cmonth/$final_file_name Output: $s3_error"
+                log_msg "INFO" "Local upload completed for '$identifier': s3://$local_s3_bucket$local_s3_bucket_path/$cyear/$cmonth/$final_file_name #Output: $s3_error"
             fi
             
             # Restore original S3 signature version if it was changed
